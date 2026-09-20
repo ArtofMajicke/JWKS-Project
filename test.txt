@@ -1,0 +1,6 @@
+uh. test 123. if this is local i need to find out how to push it then, right?
+it says untracked. so like not in the main branch then?
+ahh, I think I'm getting the hang of this. Lots of stuff going on in the output tho it's kinda overwhelming ngl
+so theoretically once i save this file it will show up on the left, under source control, under changes but unstaged,
+but if I push it would only send the first two lines that I staged and then committed earlier.
+If I pull nothing happens because no other changes have been made, but maybe I can test that later
