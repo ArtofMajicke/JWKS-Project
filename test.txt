@@ -1,2 +1,3 @@
 uh. test 123. if this is local i need to find out how to push it then, right?
 it says untracked. so like not in the main branch then?
+aha. like now. I am on the website and the first two line are here but not the rest. so if I save here and go back to vscode, then pull, will I have to compare the changes?
