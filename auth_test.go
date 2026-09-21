@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -86,5 +87,29 @@ func TestAuthHandlerWrongMethod(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status 405, got %d", rec.Code)
+	}
+}
+
+func TestAuthNoSuitableKey(t *testing.T) {
+	oldKeys := keys
+
+	expiredKey, err := generateKey("expired-test", time.Now().Add(-time.Hour).Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keys = []*Key{expiredKey}
+
+	defer func() {
+		keys = oldKeys
+	}()
+
+	req := httptest.NewRequest(http.MethodPost, "/auth", nil)
+	rec := httptest.NewRecorder()
+
+	authHandler(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d", rec.Code)
 	}
 }

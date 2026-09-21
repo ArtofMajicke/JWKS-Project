@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// sets up the keys and handlers without actually starting the server
 func setupServer() error {
 	err := initializeKeys()
 	if err != nil {

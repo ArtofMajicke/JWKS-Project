@@ -16,12 +16,14 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().Unix()
 
+	//If key is not expired, add it to the list of possible keys to send to the client, converting it to a JWK in the process
 	for _, key := range keys {
 		if key.ExpiresAt > now {
 			jwks.Keys = append(jwks.Keys, keyToJWK(key))
 		}
 	}
 
+	//send it
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(jwks)
 }
