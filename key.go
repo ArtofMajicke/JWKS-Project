@@ -41,10 +41,12 @@ func generateKey(kid string, expiresAt int64) (*Key, error) {
 	}, nil
 }
 
+var generateKeyFunc = generateKey
+
 func initializeKeys() error {
 	now := time.Now()
 
-	currentKey, err := generateKey(
+	currentKey, err := generateKeyFunc(
 		"current-key",
 		now.Add(time.Hour).Unix(),
 	)
@@ -52,7 +54,7 @@ func initializeKeys() error {
 		return err
 	}
 
-	expiredKey, err := generateKey(
+	expiredKey, err := generateKeyFunc(
 		"expired-key",
 		now.Add(-time.Hour).Unix(),
 	)

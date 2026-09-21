@@ -5,19 +5,28 @@ import (
 	"net/http"
 )
 
+func setupServer() error {
+	err := initializeKeys()
+	if err != nil {
+		return err
+	}
+
+	http.HandleFunc("/.well-known/jwks.json", jwksHandler)
+	http.HandleFunc("/auth", authHandler)
+
+	return nil
+}
+
 func main() {
-	err := initializeKeys() //create the keys for signing and verifying JWTs
-	if err != nil {         //show if there is an error
+	err := setupServer()
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	//direct requests to the appropriate handler functions
-	http.HandleFunc("/.well-known/jwks.json", jwksHandler)
-	http.HandleFunc("/auth", authHandler)
+	fmt.Println("Server running on http://localhost:8080")
 
-	fmt.Println("Server running on http://localhost:8080") //Show the server is running
-	err = http.ListenAndServe(":8080", nil)                //begin listening for requests
+	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		fmt.Println(err)
 	}
