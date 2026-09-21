@@ -3,4 +3,9 @@ it says untracked. so like not in the main branch then?
 ahh, I think I'm getting the hang of this. Lots of stuff going on in the output tho it's kinda overwhelming ngl
 so theoretically once i save this file it will show up on the left, under source control, under changes but unstaged,
 but if I push it would only send the first two lines that I staged and then committed earlier.
-If I pull nothing happens because no other changes have been made, but maybe I can test that later
+If I pull nothing happens because no other changes have been made, but maybe I can test that lateruh. test 123. if this is local i need to find out how to push it then, right?
+it says untracked. so like not in the main branch then?
+aha. like now. I am on the website and the first two line are here but not the rest. so if I save here and go back to vscode, then pull, will I have to compare the changes?
+so I pulled from origin, now I'm merging them. Was able to do choose one first, but what if I edited different lines and wanted to do it in combination? Not explaining this well but I guess I'll figure it out eventually, for now I should just get started.
+Guess you can edit here manually too but that's a lot
+wait do I just save this and close the merging window or what
