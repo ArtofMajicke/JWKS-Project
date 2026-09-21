@@ -5,16 +5,19 @@ import (
 	"net/http"
 )
 
-func helloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Hello from my JWKS server!")
-}
-
 func main() {
-	http.HandleFunc("/", helloHandler)
+	err := initializeKeys() //create the keys for signing and verifying JWTs
+	if err != nil {         //show if there is an error
+		fmt.Println(err)
+		return
+	}
 
-	fmt.Println("Server running on http://localhost:8080")
+	//direct requests to the appropriate handler functions
+	http.HandleFunc("/.well-known/jwks.json", jwksHandler)
+	http.HandleFunc("/auth", authHandler)
 
-	err := http.ListenAndServe(":8080", nil)
+	fmt.Println("Server running on http://localhost:8080") //Show the server is running
+	err = http.ListenAndServe(":8080", nil)                //begin listening for requests
 	if err != nil {
 		fmt.Println(err)
 	}
