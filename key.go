@@ -14,9 +14,6 @@ type Key struct {
 	ExpiresAt  int64
 }
 
-// Slice of all the keys
-var keys []*Key
-
 // Data about the keys that JSON sends to clients
 type JWK struct {
 	Kty string `json:"kty"`
@@ -33,17 +30,30 @@ type JWKS struct {
 }
 
 // Use random number to make an RSA key
-func generateKey(kid string, expiresAt int64) (*Key, error) {
+func generateKey(expiresAt int64) (error) {
+	//make the key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &Key{
-		Kid:        kid,
-		PrivateKey: privateKey,
-		ExpiresAt:  expiresAt,
-	}, nil
+	//serialize it
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		fmt.Println(err)
+	}
+	privatePEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+
+	//add to the db
+	_, err = db.Exec("INSERT INTO keys(kid, key, exp) VALUES(?, ?, ?)", kid, privatePEM, expiresAt)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return nil
 }
 
 // used for testing purposes to override the key generation function
@@ -54,25 +64,16 @@ func initializeKeys() error {
 	now := time.Now()
 
 	//unexpired key has expiry set one hour from starting up the server
-	currentKey, err := generateKeyFunc(
-		"current-key",
-		now.Add(time.Hour).Unix(),
-	)
+	err := generateKeyFunc(now.Add(time.Hour).Unix())
 	if err != nil {
 		return err
 	}
 
 	//expired key has expiry set one hour before starting up the server
-	expiredKey, err := generateKeyFunc(
-		"expired-key",
-		now.Add(-time.Hour).Unix(),
-	)
+	err := generateKeyFunc(now.Add(-time.Hour).Unix())
 	if err != nil {
 		return err
 	}
-
-	//add them both to the keys slice
-	keys = []*Key{currentKey, expiredKey}
 
 	return nil
 }
