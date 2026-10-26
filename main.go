@@ -9,12 +9,14 @@ import (
 )
 
 var db *sql.DB //declare db here so it's global
+var dbPath = "./totally_not_my_privateKeys.db"
+var serverMux *http.ServeMux
 
 // sets up the keys and handlers without actually starting the server
 func setupServer() error {
 	//Create/open DB file
 	var err error
-	db, err = sql.Open("sqlite3", "./totally_not_my_privateKeys.db")
+	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return err
 	}
@@ -37,8 +39,9 @@ func setupServer() error {
 		return err
 	}
 
-	http.HandleFunc("/.well-known/jwks.json", jwksHandler)
-	http.HandleFunc("/auth", authHandler)
+	serverMux = http.NewServeMux()
+	serverMux.HandleFunc("/.well-known/jwks.json", jwksHandler)
+	serverMux.HandleFunc("/auth", authHandler)
 
 	return nil
 }
@@ -52,7 +55,7 @@ func main() {
 
 	fmt.Println("Server running on http://localhost:8080")
 
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", serverMux)
 	if err != nil {
 		fmt.Println(err)
 	}

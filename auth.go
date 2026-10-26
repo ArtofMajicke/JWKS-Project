@@ -51,8 +51,20 @@ func authHandler(w http.ResponseWriter, r *http.Request) { // /auth
 
 	//deserialize key
 	block, _ := pem.Decode(key)
-	privateKeyImported, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
-	rsaPrivateKey := privateKeyImported.(*rsa.PrivateKey)
+	if block == nil {
+		http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+		return
+	}
+	privateKeyImported, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+		return
+	}
+	rsaPrivateKey, ok := privateKeyImported.(*rsa.PrivateKey)
+	if !ok {
+		http.Error(w, "Stored key is not RSA", http.StatusInternalServerError)
+		return
+	}
 
 	KID := strconv.Itoa(kid)
 

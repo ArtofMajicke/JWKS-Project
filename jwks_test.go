@@ -52,3 +52,47 @@ func TestJWKSHandlerWrongMethod(t *testing.T) {
 		t.Fatalf("expected status 405, got %d", rec.Code)
 	}
 }
+
+func TestJWKSHandlerEmptyDB(t *testing.T) {
+	setupTestDB(t)
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/.well-known/jwks.json", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	jwksHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s",
+			rec.Code, rec.Body.String())
+	}
+
+	var jwks JWKS
+	if err := json.NewDecoder(rec.Body).Decode(&jwks); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(jwks.Keys) != 0 {
+		t.Fatalf("expected 0 keys, got %d", len(jwks.Keys))
+	}
+}
+
+func TestJWKSHandlerDatabaseError(t *testing.T) {
+	setupTestDB(t)
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet, "/.well-known/jwks.json", nil,
+	)
+	rec := httptest.NewRecorder()
+
+	jwksHandler(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d", rec.Code)
+	}
+}

@@ -55,13 +55,13 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">jwks-project/auth.go (84.0%)</option>
+				<option value="file0">jwks-project/auth.go (71.8%)</option>
 				
-				<option value="file1">jwks-project/jwks.go (100.0%)</option>
+				<option value="file1">jwks-project/jwks.go (68.4%)</option>
 				
-				<option value="file2">jwks-project/key.go (81.2%)</option>
+				<option value="file2">jwks-project/key.go (87.0%)</option>
 				
-				<option value="file3">jwks-project/main.go (0.0%)</option>
+				<option value="file3">jwks-project/main.go (50.0%)</option>
 				
 				</select>
 			</div>
@@ -78,58 +78,92 @@
 		<pre class="file" id="file0" style="display: none">package main
 
 import (
+        "crypto/rsa"
+        "crypto/x509"
+        "database/sql"
+        "encoding/pem"
+        "errors"
+        "log"
         "net/http"
+        "strconv"
         "time"
 
         "github.com/golang-jwt/jwt/v5"
 )
 
-func authHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+func authHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{ // /auth
         if r.Method != http.MethodPost </span><span class="cov8" title="1">{
                 http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
                 return
         }</span>
 
-        <span class="cov8" title="1">var key *Key
+        <span class="cov8" title="1">var kid int
+        var key []byte
+        var exp int64
+        var err error
         now := time.Now().Unix()
 
-        if r.URL.Query().Has("expired") </span><span class="cov8" title="1">{
-                for _, candidate := range keys </span><span class="cov8" title="1">{
-                        if candidate.ExpiresAt &lt;= now </span><span class="cov8" title="1">{
-                                key = candidate
-                                break</span>
-                        }
-                }
-        } else<span class="cov8" title="1"> {
-                for _, candidate := range keys </span><span class="cov8" title="1">{
-                        if candidate.ExpiresAt &gt; now </span><span class="cov8" title="1">{
-                                key = candidate
-                                break</span>
-                        }
-                }
-        }
+        //Looks for expired keys if query asked for it, otherwise looks for unexpired keys.
+        if r.URL.Query().Has("expired") </span><span class="cov8" title="1">{ //FIXME also like couldn't I just use a bool and half this code
+                err = db.QueryRow(
+                        "SELECT kid, key, exp FROM keys WHERE exp &lt;= ? LIMIT 1",
+                        now,
+                ).Scan(&amp;kid, &amp;key, &amp;exp)
 
-        <span class="cov8" title="1">if key == nil </span><span class="cov0" title="0">{
+        }</span> else<span class="cov8" title="1"> {
+                err = db.QueryRow(
+                        "SELECT kid, key, exp FROM keys WHERE exp &gt; ? LIMIT 1",
+                        now,
+                ).Scan(&amp;kid, &amp;key, &amp;exp)
+        }</span>
+
+        <span class="cov8" title="1">if errors.Is(err, sql.ErrNoRows) </span><span class="cov8" title="1">{ // If no key is found returns an error
                 http.Error(w, "No suitable key available", http.StatusInternalServerError)
+                return
+        }</span> else<span class="cov8" title="1"> if err != nil </span><span class="cov0" title="0">{
+                log.Printf("Failed to retrieve key: %v", err)
+                http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
                 return
         }</span>
 
-        <span class="cov8" title="1">token := jwt.NewWithClaims(
+        //deserialize key
+        <span class="cov8" title="1">block, _ := pem.Decode(key)
+        if block == nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">privateKeyImported, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">rsaPrivateKey, ok := privateKeyImported.(*rsa.PrivateKey)
+        if !ok </span><span class="cov0" title="0">{
+                http.Error(w, "Stored key is not RSA", http.StatusInternalServerError)
+                return
+        }</span>
+
+        <span class="cov8" title="1">KID := strconv.Itoa(kid)
+
+        //Creates a JWT token with the selected key
+        token := jwt.NewWithClaims(
                 jwt.SigningMethodRS256,
                 jwt.MapClaims{
                         "sub": "test-user",
                         "iat": now,
-                        "exp": key.ExpiresAt,
+                        "exp": exp,
                 },
         )
-        token.Header["kid"] = key.Kid
+        token.Header["kid"] = KID
 
-        signedToken, err := token.SignedString(key.PrivateKey)
+        //Signs the token with the selected key
+        signedToken, err := token.SignedString(rsaPrivateKey)
         if err != nil </span><span class="cov0" title="0">{
                 http.Error(w, "Failed to sign token", http.StatusInternalServerError)
                 return
         }</span>
 
+        //sends the signed token to the client
         <span class="cov8" title="1">w.Header().Set("Content-Type", "application/jwt")
         w.Write([]byte(signedToken))</span>
 }
@@ -138,27 +172,72 @@ func authHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" titl
 		<pre class="file" id="file1" style="display: none">package main
 
 import (
+        "crypto/rsa"
+        "crypto/x509"
         "encoding/json"
+        "encoding/pem"
+        "log"
         "net/http"
         "time"
 )
 
-func jwksHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+func jwksHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{ // /.well-known/jwks.json
         if r.Method != http.MethodGet </span><span class="cov8" title="1">{
                 http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
                 return
         }</span>
 
-        <span class="cov8" title="1">jwks := JWKS{}
+        <span class="cov8" title="1">jwks := JWKS{
+                Keys: []JWK{},
+        }
 
         now := time.Now().Unix()
 
-        for _, key := range keys </span><span class="cov8" title="1">{
-                if key.ExpiresAt &gt; now </span><span class="cov8" title="1">{
-                        jwks.Keys = append(jwks.Keys, keyToJWK(key))
+        //If key is not expired, add it to the list of possible keys to send to the client, converting it to a JWK in the process
+        rows, err := db.Query("SELECT kid, key FROM keys WHERE exp &gt; ?", now)
+        if err != nil </span><span class="cov8" title="1">{
+                log.Printf("Failed to retrieve key: %v", err)
+                http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">defer rows.Close()
+        for rows.Next() </span><span class="cov8" title="1">{
+                var kid int
+                var key []byte
+                err = rows.Scan(&amp;kid, &amp;key)
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Printf("Failed to retrieve key: %v", err)
+                        http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+                        return
                 }</span>
-        }
 
+                //deserialize key
+                <span class="cov8" title="1">block, _ := pem.Decode(key)
+                if block == nil </span><span class="cov0" title="0">{
+                        http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+                        return
+                }</span>
+                <span class="cov8" title="1">privateKeyImported, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+                if err != nil </span><span class="cov0" title="0">{
+                        http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+                        return
+                }</span>
+                <span class="cov8" title="1">rsaPrivateKey, ok := privateKeyImported.(*rsa.PrivateKey)
+                if !ok </span><span class="cov0" title="0">{
+                        http.Error(w, "Stored key is not RSA", http.StatusInternalServerError)
+                        return
+                }</span>
+
+                //add to jwks to send
+                <span class="cov8" title="1">jwks.Keys = append(jwks.Keys, keyToJWK(rsaPrivateKey, kid))</span>
+        }
+        <span class="cov8" title="1">if err = rows.Err(); err != nil </span><span class="cov0" title="0">{
+                log.Printf("Failed to retrieve key: %v", err)
+                http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+                return
+        }</span>
+
+        //send it
         <span class="cov8" title="1">w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(jwks)</span>
 }
@@ -169,18 +248,14 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) <span class="cov8" titl
 import (
         "crypto/rand"
         "crypto/rsa"
+        "crypto/x509"
         "encoding/base64"
+        "encoding/pem"
+        "strconv"
         "time"
 )
 
-type Key struct {
-        Kid        string
-        PrivateKey *rsa.PrivateKey
-        ExpiresAt  int64
-}
-
-var keys []*Key
-
+// Data about the keys that JSON sends to clients
 type JWK struct {
         Kty string `json:"kty"`
         N   string `json:"n"`
@@ -190,54 +265,71 @@ type JWK struct {
         Kid string `json:"kid"`
 }
 
+// Slice of all the acceptable keys (not expired)
 type JWKS struct {
         Keys []JWK `json:"keys"`
 }
 
-func generateKey(kid string, expiresAt int64) (*Key, error) <span class="cov8" title="1">{
+// Use random number to make an RSA key
+func generateKey(expiresAt int64) error <span class="cov8" title="1">{
+        //make the key
         privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-        if err != nil </span><span class="cov0" title="0">{
-                return nil, err
+        if err != nil </span><span class="cov8" title="1">{
+                return err
         }</span>
 
-        <span class="cov8" title="1">return &amp;Key{
-                Kid:        kid,
-                PrivateKey: privateKey,
-                ExpiresAt:  expiresAt,
-        }, nil</span>
+        //serialize it
+        <span class="cov8" title="1">privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">privatePEM := pem.EncodeToMemory(&amp;pem.Block{
+                Type:  "PRIVATE KEY",
+                Bytes: privateKeyBytes,
+        })
+
+        //add to the db
+        _, err = db.Exec("INSERT INTO keys(key, exp) VALUES(?, ?)", privatePEM, expiresAt)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
 }
 
+// used for testing purposes to override the key generation function
+var generateKeyFunc = generateKey
+
+// Make a unexpired key and an expired key for proof of concept
 func initializeKeys() error <span class="cov8" title="1">{
         now := time.Now()
 
-        currentKey, err := generateKey(
-                "current-key",
-                now.Add(time.Hour).Unix(),
-        )
+        //unexpired key has expiry set one hour from starting up the server
+        err := generateKeyFunc(now.Add(time.Hour).Unix())
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        //expired key has expiry set one hour before starting up the server
+        <span class="cov8" title="1">err = generateKeyFunc(now.Add(-time.Hour).Unix())
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
 
-        <span class="cov8" title="1">expiredKey, err := generateKey(
-                "expired-key",
-                now.Add(-time.Hour).Unix(),
-        )
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-
-        <span class="cov8" title="1">keys = []*Key{currentKey, expiredKey}
-
-        return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 
-func keyToJWK(key *Key) JWK <span class="cov8" title="1">{
-        n := base64.RawURLEncoding.EncodeToString(key.PrivateKey.N.Bytes())
+// Takes an RSA key and gathers the correct information to make a JWK to send to the client
+func keyToJWK(PrivateKey *rsa.PrivateKey, kid int) JWK <span class="cov8" title="1">{
+        //convert kid to string for JWK
+        KID := strconv.Itoa(kid)
+
+        n := base64.RawURLEncoding.EncodeToString(PrivateKey.N.Bytes())
 
         eBytes := []byte{
-                byte(key.PrivateKey.E &gt;&gt; 16),
-                byte(key.PrivateKey.E &gt;&gt; 8),
-                byte(key.PrivateKey.E),
+                byte(PrivateKey.E &gt;&gt; 16),
+                byte(PrivateKey.E &gt;&gt; 8),
+                byte(PrivateKey.E),
         }
 
         return JWK{
@@ -246,7 +338,7 @@ func keyToJWK(key *Key) JWK <span class="cov8" title="1">{
                 E:   base64.RawURLEncoding.EncodeToString(eBytes),
                 Alg: "RS256",
                 Use: "sig",
-                Kid: key.Kid,
+                Kid: KID,
         }
 }</span>
 </pre>
@@ -254,26 +346,65 @@ func keyToJWK(key *Key) JWK <span class="cov8" title="1">{
 		<pre class="file" id="file3" style="display: none">package main
 
 import (
+        "database/sql"
         "fmt"
         "net/http"
+
+        _ "github.com/mattn/go-sqlite3"
 )
 
+var db *sql.DB //declare db here so it's global
+var dbPath = "./totally_not_my_privateKeys.db"
+var serverMux *http.ServeMux
+
+// sets up the keys and handlers without actually starting the server
+func setupServer() error <span class="cov8" title="1">{
+        //Create/open DB file
+        var err error
+        db, err = sql.Open("sqlite3", dbPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">sqlStmt := `
+    CREATE TABLE IF NOT EXISTS keys(
+            kid INTEGER PRIMARY KEY AUTOINCREMENT,
+            key BLOB NOT NULL,
+            exp INTEGER NOT NULL
+        );
+    `
+        _, err = db.Exec(sqlStmt)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        //Make keys
+        <span class="cov8" title="1">err = initializeKeys()
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">serverMux = http.NewServeMux()
+        serverMux.HandleFunc("/.well-known/jwks.json", jwksHandler)
+        serverMux.HandleFunc("/auth", authHandler)
+
+        return nil</span>
+}
+
 func main() <span class="cov0" title="0">{
-        err := initializeKeys() //create the keys for signing and verifying JWTs
-        if err != nil </span><span class="cov0" title="0">{         //show if there is an error
+        err := setupServer()
+        if err != nil </span><span class="cov0" title="0">{
                 fmt.Println(err)
                 return
         }</span>
 
-        //direct requests to the appropriate handler functions
-        <span class="cov0" title="0">http.HandleFunc("/.well-known/jwks.json", jwksHandler)
-        http.HandleFunc("/auth", authHandler)
+        <span class="cov0" title="0">fmt.Println("Server running on http://localhost:8080")
 
-        fmt.Println("Server running on http://localhost:8080") //Show the server is running
-        err = http.ListenAndServe(":8080", nil)                //begin listening for requests
+        err = http.ListenAndServe(":8080", serverMux)
         if err != nil </span><span class="cov0" title="0">{
                 fmt.Println(err)
         }</span>
+        <span class="cov0" title="0">db.Close()</span>
 }
 </pre>
 		

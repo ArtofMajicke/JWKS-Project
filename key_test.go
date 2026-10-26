@@ -79,3 +79,19 @@ func TestInitializeKeys(t *testing.T) {
 		t.Fatalf("expected 2 keys, got %d", count)
 	}
 }
+
+func TestInitializeKeysError(t *testing.T) {
+	setupTestDB(t)
+
+	oldGenerateKeyFunc := generateKeyFunc
+	generateKeyFunc = func(exp int64) error {
+		return errors.New("forced key generation failure")
+	}
+	defer func() {
+		generateKeyFunc = oldGenerateKeyFunc
+	}()
+
+	if err := initializeKeys(); err == nil {
+		t.Fatal("expected initializeKeys to return an error")
+	}
+}

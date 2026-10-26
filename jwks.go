@@ -16,7 +16,9 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) { // /.well-known/jwks.
 		return
 	}
 
-	jwks := JWKS{}
+	jwks := JWKS{
+		Keys: []JWK{},
+	}
 
 	now := time.Now().Unix()
 
@@ -40,8 +42,20 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) { // /.well-known/jwks.
 
 		//deserialize key
 		block, _ := pem.Decode(key)
-		privateKeyImported, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
-		rsaPrivateKey := privateKeyImported.(*rsa.PrivateKey)
+		if block == nil {
+			http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+			return
+		}
+		privateKeyImported, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			http.Error(w, "Invalid stored key", http.StatusInternalServerError)
+			return
+		}
+		rsaPrivateKey, ok := privateKeyImported.(*rsa.PrivateKey)
+		if !ok {
+			http.Error(w, "Stored key is not RSA", http.StatusInternalServerError)
+			return
+		}
 
 		//add to jwks to send
 		jwks.Keys = append(jwks.Keys, keyToJWK(rsaPrivateKey, kid))
