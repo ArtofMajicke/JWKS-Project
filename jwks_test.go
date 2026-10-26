@@ -5,27 +5,31 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestJWKSHandler(t *testing.T) {
-	err := initializeKeys()
-	if err != nil {
+	setupTestDB(t)
+
+	if err := initializeKeys(); err != nil {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
+	req := httptest.NewRequest(
+		http.MethodGet, "/.well-known/jwks.json", nil,
+	)
 	rec := httptest.NewRecorder()
 
 	jwksHandler(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+		t.Fatalf("expected status 200, got %d: %s",
+			rec.Code, rec.Body.String())
 	}
 
 	var jwks JWKS
-
-	err = json.NewDecoder(rec.Body).Decode(&jwks)
-	if err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&jwks); err != nil {
 		t.Fatal(err)
 	}
 
@@ -33,8 +37,8 @@ func TestJWKSHandler(t *testing.T) {
 		t.Fatalf("expected 1 unexpired key, got %d", len(jwks.Keys))
 	}
 
-	if jwks.Keys[0].Kid != "current-key" {
-		t.Fatalf("expected current-key, got %s", jwks.Keys[0].Kid)
+	if jwks.Keys[0].Kid != "1" {
+		t.Fatalf("expected kid 1, got %s", jwks.Keys[0].Kid)
 	}
 }
 

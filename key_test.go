@@ -2,10 +2,44 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+func setupTestDB(t *testing.T) {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+
+	var err error
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec(`
+        CREATE TABLE keys (
+            kid INTEGER PRIMARY KEY AUTOINCREMENT,
+            key BLOB NOT NULL,
+            exp INTEGER NOT NULL
+        )
+    `)
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("failed to close test database: %v", err)
+		}
+	})
+}
 
 type failingReader struct{}
 
@@ -21,52 +55,27 @@ func TestGenerateKeyError(t *testing.T) {
 		rand.Reader = oldReader
 	}()
 
-	_, err := generateKey("test-key", time.Now().Unix())
+	err := generateKey(time.Now().Unix())
 
 	if err == nil {
 		t.Fatal("expected generateKey to return an error")
 	}
 }
 
-func TestInitializeKeysFirstError(t *testing.T) {
-	oldGenerateKeyFunc := generateKeyFunc
+func TestInitializeKeys(t *testing.T) {
+	setupTestDB(t)
 
-	generateKeyFunc = func(kid string, expiresAt int64) (*Key, error) {
-		return nil, errors.New("forced error")
+	if err := initializeKeys(); err != nil {
+		t.Fatal(err)
 	}
 
-	defer func() {
-		generateKeyFunc = oldGenerateKeyFunc
-	}()
-
-	err := initializeKeys()
-
-	if err == nil {
-		t.Fatal("expected initializeKeys to return an error")
-	}
-}
-
-func TestInitializeKeysSecondError(t *testing.T) {
-	oldGenerateKeyFunc := generateKeyFunc
-	callCount := 0
-
-	generateKeyFunc = func(kid string, expiresAt int64) (*Key, error) {
-		callCount++
-
-		if callCount == 2 {
-			return nil, errors.New("forced error")
-		}
-
-		return generateKey(kid, expiresAt)
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM keys").Scan(&count)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	defer func() {
-		generateKeyFunc = oldGenerateKeyFunc
-	}()
-
-	err := initializeKeys()
-
-	if err == nil {
-		t.Fatal("expected initializeKeys to return an error")
+	if count != 2 {
+		t.Fatalf("expected 2 keys, got %d", count)
 	}
 }
