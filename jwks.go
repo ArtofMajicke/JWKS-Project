@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"log"
 	"net/http"
 	"time"
 )
@@ -17,17 +21,21 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) { // /.well-known/jwks.
 	now := time.Now().Unix()
 
 	//If key is not expired, add it to the list of possible keys to send to the client, converting it to a JWK in the process
-	rows, err = db.Exec("SELECT kid, key FROM keys WHERE exp > ?", now)
+	rows, err := db.Query("SELECT kid, key FROM keys WHERE exp > ?", now)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Failed to retrieve key: %v", err)
+		http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var kid int
-		var key string
+		var key []byte
 		err = rows.Scan(&kid, &key)
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("Failed to retrieve key: %v", err)
+			http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+			return
 		}
 
 		//deserialize key
@@ -39,7 +47,9 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) { // /.well-known/jwks.
 		jwks.Keys = append(jwks.Keys, keyToJWK(rsaPrivateKey, kid))
 	}
 	if err = rows.Err(); err != nil {
-		fmt.Println(err)
+		log.Printf("Failed to retrieve key: %v", err)
+		http.Error(w, "Failed to retrieve key", http.StatusInternalServerError)
+		return
 	}
 
 	//send it

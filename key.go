@@ -3,7 +3,10 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
+	"strconv"
 	"time"
 )
 
@@ -33,7 +36,7 @@ func generateKey(expiresAt int64) error {
 	//serialize it
 	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 	privatePEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "PRIVATE KEY",
@@ -41,9 +44,9 @@ func generateKey(expiresAt int64) error {
 	})
 
 	//add to the db
-	_, err = db.Exec("INSERT INTO keys(kid, key, exp) VALUES(?, ?, ?)", kid, privatePEM, expiresAt)
+	_, err = db.Exec("INSERT INTO keys(key, exp) VALUES(?, ?)", privatePEM, expiresAt)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	return nil
@@ -63,7 +66,7 @@ func initializeKeys() error {
 	}
 
 	//expired key has expiry set one hour before starting up the server
-	err := generateKeyFunc(now.Add(-time.Hour).Unix())
+	err = generateKeyFunc(now.Add(-time.Hour).Unix())
 	if err != nil {
 		return err
 	}
@@ -72,7 +75,7 @@ func initializeKeys() error {
 }
 
 // Takes an RSA key and gathers the correct information to make a JWK to send to the client
-func keyToJWK(PrivateKey *rsa.PrivateKey, string kid) JWK {
+func keyToJWK(PrivateKey *rsa.PrivateKey, kid int) JWK {
 	//convert kid to string for JWK
 	KID := strconv.Itoa(kid)
 

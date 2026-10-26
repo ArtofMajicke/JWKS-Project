@@ -3,18 +3,22 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/mattn/go-sqlite3"
 	"net/http"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+var db *sql.DB //declare db here so it's global
 
 // sets up the keys and handlers without actually starting the server
 func setupServer() error {
 	//Create/open DB file
-	db, err := sql.Open("sqlite3", "./totally_not_my_privateKeys.db")
+	var err error
+	db, err = sql.Open("sqlite3", "./totally_not_my_privateKeys.db")
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-	defer db.Close()
+
 	sqlStmt := `
     CREATE TABLE IF NOT EXISTS keys(
     	kid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,11 +28,11 @@ func setupServer() error {
     `
 	_, err = db.Exec(sqlStmt)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
 	//Make keys
-	err := initializeKeys()
+	err = initializeKeys()
 	if err != nil {
 		return err
 	}
@@ -52,4 +56,5 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	db.Close()
 }
