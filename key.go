@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-// RSA Key for the server to keep
-type Key struct {
-	Kid        string
-	PrivateKey *rsa.PrivateKey
-	ExpiresAt  int64
-}
-
 // Data about the keys that JSON sends to clients
 type JWK struct {
 	Kty string `json:"kty"`
@@ -79,13 +72,16 @@ func initializeKeys() error {
 }
 
 // Takes an RSA key and gathers the correct information to make a JWK to send to the client
-func keyToJWK(key *Key) JWK {
-	n := base64.RawURLEncoding.EncodeToString(key.PrivateKey.N.Bytes())
+func keyToJWK(PrivateKey *rsa.PrivateKey, string kid) JWK {
+	 //convert kid to string for JWK
+	 KID := strconv.Itoa(kid)
+	
+	n := base64.RawURLEncoding.EncodeToString(PrivateKey.N.Bytes())
 
 	eBytes := []byte{
-		byte(key.PrivateKey.E >> 16),
-		byte(key.PrivateKey.E >> 8),
-		byte(key.PrivateKey.E),
+		byte(PrivateKey.E >> 16),
+		byte(PrivateKey.E >> 8),
+		byte(PrivateKey.E),
 	}
 
 	return JWK{
@@ -94,6 +90,6 @@ func keyToJWK(key *Key) JWK {
 		E:   base64.RawURLEncoding.EncodeToString(eBytes),
 		Alg: "RS256",
 		Use: "sig",
-		Kid: key.Kid,
+		Kid: KID,
 	}
 }

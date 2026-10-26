@@ -7,36 +7,36 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func authHandler(w http.ResponseWriter, r *http.Request) {
+func authHandler(w http.ResponseWriter, r *http.Request) { // /auth
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var key *Key
+	var kid int64
+	var key string
+	var exp int64
 	now := time.Now().Unix()
 
 	//Looks for expired keys if query asked for it, otherwise looks for unexpired keys.
-	if r.URL.Query().Has("expired") {
-		for _, candidate := range keys {
-			if candidate.ExpiresAt <= now {
-				key = candidate
-				break
-			}
-		}
+	if r.URL.Query().Has("expired") { //FIXME also like couldn't I just use a bool and half this code
+		err := db.QueryRow(
+			"SELECT kid, key, exp FROM keys WHERE exp <= ? LIMIT 1",
+			now,
+		).Scan(&kid, &key, &exp)
+
 	} else {
-		for _, candidate := range keys {
-			if candidate.ExpiresAt > now {
-				key = candidate
-				break
-			}
-		}
+		err := db.QueryRow(
+			"SELECT kid, key, exp FROM keys WHERE exp > ? LIMIT 1",
+			now,
+		).Scan(&kid, &key, &exp)
 	}
 
-	// If no key is found, for instance both have expired and client requested unexpired keys, returns an error
-	if key == nil {
+	if errors.Is(err, sql.ErrNoRows) { // If no key is found returns an error
 		http.Error(w, "No suitable key available", http.StatusInternalServerError)
 		return
+	} else if err != nil {
+		fmt.Println(err)
 	}
 
 	//Creates a JWT token with the selected key
@@ -45,13 +45,13 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		jwt.MapClaims{
 			"sub": "test-user",
 			"iat": now,
-			"exp": key.ExpiresAt,
+			"exp": exp,
 		},
 	)
-	token.Header["kid"] = key.Kid
+	token.Header["kid"] = kid
 
 	//Signs the token with the selected key
-	signedToken, err := token.SignedString(key.PrivateKey)
+	signedToken, err := token.SignedString(key)
 	if err != nil {
 		http.Error(w, "Failed to sign token", http.StatusInternalServerError)
 		return
