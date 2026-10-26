@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
 	"database/sql"
+	"fmt"
 	_ "github.com/mattn/go-sqlite3"
+	"net/http"
 )
 
 // sets up the keys and handlers without actually starting the server
@@ -32,7 +32,6 @@ func setupServer() error {
 	if err != nil {
 		return err
 	}
-
 
 	http.HandleFunc("/.well-known/jwks.json", jwksHandler)
 	http.HandleFunc("/auth", authHandler)

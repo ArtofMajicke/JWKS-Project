@@ -34,14 +34,14 @@ func jwksHandler(w http.ResponseWriter, r *http.Request) { // /.well-known/jwks.
 		block, _ := pem.Decode(key)
 		privateKeyImported, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 		rsaPrivateKey := privateKeyImported.(*rsa.PrivateKey)
-		
+
 		//add to jwks to send
 		jwks.Keys = append(jwks.Keys, keyToJWK(rsaPrivateKey, kid))
 	}
 	if err = rows.Err(); err != nil {
 		fmt.Println(err)
 	}
-	
+
 	//send it
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(jwks)

@@ -23,7 +23,7 @@ type JWKS struct {
 }
 
 // Use random number to make an RSA key
-func generateKey(expiresAt int64) (error) {
+func generateKey(expiresAt int64) error {
 	//make the key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -73,9 +73,9 @@ func initializeKeys() error {
 
 // Takes an RSA key and gathers the correct information to make a JWK to send to the client
 func keyToJWK(PrivateKey *rsa.PrivateKey, string kid) JWK {
-	 //convert kid to string for JWK
-	 KID := strconv.Itoa(kid)
-	
+	//convert kid to string for JWK
+	KID := strconv.Itoa(kid)
+
 	n := base64.RawURLEncoding.EncodeToString(PrivateKey.N.Bytes())
 
 	eBytes := []byte{
